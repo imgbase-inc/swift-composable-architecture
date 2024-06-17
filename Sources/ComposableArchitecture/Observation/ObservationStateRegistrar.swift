@@ -4,7 +4,9 @@
     public private(set) var id = ObservableStateID()
     #if !os(visionOS)
       @usableFromInline
-      let registrar = PerceptionRegistrar()
+      let registrar = PerceptionRegistrar(
+        isPerceptionCheckingEnabled: _isStorePerceptionCheckingEnabled
+      )
     #else
       @usableFromInline
       let registrar = ObservationRegistrar()
