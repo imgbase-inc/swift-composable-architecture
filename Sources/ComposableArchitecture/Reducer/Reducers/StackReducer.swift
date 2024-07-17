@@ -6,7 +6,7 @@ import OrderedCollections
 /// A list of data representing the content of a navigation stack.
 ///
 /// Use this type for modeling a feature's domain that needs to present child features using
-/// ``Reducer/forEach(_:action:destination:fileID:line:)-yz3v``.
+/// ``Reducer/forEach(_:action:destination:fileID:line:)-582rd``.
 ///
 /// See the dedicated article on <doc:Navigation> for more information on the library's navigation
 /// tools, and in particular see <doc:StackBasedNavigation> for information on modeling navigation
@@ -162,8 +162,9 @@ extension StackState: RandomAccessCollection, RangeReplaceableCollection {
   public mutating func removeAll(keepingCapacity keepCapacity: Bool = false) {
     self._dictionary.removeAll(keepingCapacity: keepCapacity)
   }
-  public mutating func replaceSubrange<C: Collection>(_ subrange: Range<Int>, with newElements: C)
-  where C.Element == Element {
+  public mutating func replaceSubrange(
+    _ subrange: Range<Int>, with newElements: some Collection<Element>
+  ) {
     self._dictionary.removeSubrange(subrange)
     for (offset, element) in zip(subrange.lowerBound..., newElements) {
       self._dictionary.updateValue(element, forKey: self.stackElementID.next(), insertingAt: offset)
@@ -219,7 +220,7 @@ extension StackState: CustomDumpReflectable {
 /// A wrapper type for actions that can be presented in a navigation stack.
 ///
 /// Use this type for modeling a feature's domain that needs to present child features using
-/// ``Reducer/forEach(_:action:destination:fileID:line:)-yz3v``.
+/// ``Reducer/forEach(_:action:destination:fileID:line:)-582rd``.
 ///
 /// See the dedicated article on <doc:Navigation> for more information on the library's navigation
 /// tools, and in particular see <doc:StackBasedNavigation> for information on modeling navigation
@@ -348,14 +349,15 @@ extension Reducer {
   /// - Returns: A reducer that combines the destination reducer with the parent reducer.
   @inlinable
   @warn_unqualified_access
-  public func forEach<DestinationState, DestinationAction, Destination: Reducer>(
+  public func forEach<
+    DestinationState, DestinationAction, Destination: Reducer<DestinationState, DestinationAction>
+  >(
     _ toStackState: WritableKeyPath<State, StackState<DestinationState>>,
     action toStackAction: CaseKeyPath<Action, StackAction<DestinationState, DestinationAction>>,
     @ReducerBuilder<DestinationState, DestinationAction> destination: () -> Destination,
     fileID: StaticString = #fileID,
     line: UInt = #line
-  ) -> _StackReducer<Self, Destination>
-  where Destination.State == DestinationState, Destination.Action == DestinationAction {
+  ) -> some Reducer<State, Action> {
     _StackReducer(
       base: self,
       toStackState: toStackState,
@@ -392,14 +394,15 @@ extension Reducer {
   )
   @inlinable
   @warn_unqualified_access
-  public func forEach<DestinationState, DestinationAction, Destination: Reducer>(
+  public func forEach<
+    DestinationState, DestinationAction, Destination: Reducer<DestinationState, DestinationAction>
+  >(
     _ toStackState: WritableKeyPath<State, StackState<DestinationState>>,
     action toStackAction: AnyCasePath<Action, StackAction<DestinationState, DestinationAction>>,
     @ReducerBuilder<DestinationState, DestinationAction> destination: () -> Destination,
     fileID: StaticString = #fileID,
     line: UInt = #line
-  ) -> _StackReducer<Self, Destination>
-  where Destination.State == DestinationState, Destination.Action == DestinationAction {
+  ) -> some Reducer<State, Action> {
     _StackReducer(
       base: self,
       toStackState: toStackState,

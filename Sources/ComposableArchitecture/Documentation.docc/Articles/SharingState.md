@@ -69,7 +69,7 @@ dependency or using the shared state tools discussed in this article.
 
 ## Explicit shared state
 
-This is the simplest kind of shared state to get start with. It allows you to share state amongst
+This is the simplest kind of shared state to get started with. It allows you to share state amongst
 many features without any persistence. The data is only held in memory, and will be cleared out the
 next time the application is run.
 
@@ -95,7 +95,7 @@ struct ParentFeature {
 > information about how to initialize types that use `@Shared`.
 
 Then suppose that this feature can present a child feature that wants access to this shared `count`
-value. It too would hold onto an `@Shared` property to a count:
+value. It too would hold onto a `@Shared` property to a count:
 
 ```swift
 @Reducer
@@ -570,7 +570,7 @@ shared state in an effect, and then increments from the effect:
 ```swift
 case .incrementButtonTapped:
   return .run { [sharedCount = state.$count] _ in
-    sharedCount.withLock { $0 += 1 }
+    await sharedCount.withLock { $0 += 1 }
   }
 ```
 
@@ -1002,7 +1002,7 @@ To mutate a piece of shared state in an isolated fashion, use the ``Shared/withL
 defined on the `@Shared` projected value:
 
 ```swift
-state.$count.withLock { $0 += 1 }
+await state.$count.withLock { $0 += 1 }
 ```
 
 That locks the entire unit of work of reading the current count, incrementing it, and storing it
@@ -1012,7 +1012,7 @@ Technically it is still possible to write code that has race conditions, such as
 
 ```swift
 let currentCount = state.count
-state.$count.withLock { $0 = currentCount + 1 }
+await state.$count.withLock { $0 = currentCount + 1 }
 ```
 
 But there is no way to 100% prevent race conditions in code. Even actors are susceptible to 
@@ -1037,7 +1037,7 @@ sure that the full unit of work is guarded by a lock.
 > ```swift
 > return .run { _ in
 >   @Shared(.posts) var posts
->   let post = $posts.withLock { $0[id: id] }
+>   let post = await $posts.withLock { $0[id: id] }
 >   // ...
 > }
 > ```

@@ -1,5 +1,6 @@
 import Combine
 @_spi(Internals) import ComposableArchitecture
+import CustomDump
 import XCTest
 
 final class SharedTests: XCTestCase {
@@ -365,7 +366,7 @@ final class SharedTests: XCTestCase {
           case .startTimer:
             return .run { [count = state.$count] send in
               for await _ in self.queue.timer(interval: .seconds(1)) {
-                count.withLock { $0 += 1 }
+                await count.withLock { $0 += 1 }
                 await send(.timerTick)
               }
             }
@@ -376,7 +377,7 @@ final class SharedTests: XCTestCase {
               .run { [count = state.$count] _ in
                 Task {
                   try await self.queue.sleep(for: .seconds(1))
-                  count.withLock { $0 = 42 }
+                  await count.withLock { $0 = 42 }
                 }
               }
             )
@@ -934,6 +935,65 @@ final class SharedTests: XCTestCase {
     XCTAssertEqual(count, count)
     XCTAssertEqual(count.wrappedValue, count.wrappedValue)
   }
+
+  func testDefaultVersusValueInExternalStorage() async {
+    @Dependency(\.defaultAppStorage) var userDefaults
+    userDefaults.set(true, forKey: "optionalValueWithDefault")
+
+    @Shared(.optionalValueWithDefault) var optionalValueWithDefault
+
+    XCTAssertNotNil(optionalValueWithDefault)
+
+    await $optionalValueWithDefault.withLock { $0 = nil }
+
+    XCTAssertNil(optionalValueWithDefault)
+  }
+
+  func testElements() {
+    struct User: Equatable, Identifiable {
+      let id: Int
+      var name = ""
+    }
+    let sharedCollection = Shared([User(id: 1), User(id: 2)] as IdentifiedArrayOf<User>)
+    let elements = sharedCollection.elements
+    let first = elements.first!
+    let second = elements.last!
+
+    first.wrappedValue.name = "Blob"
+    second.wrappedValue.name = "Blob Jr"
+    XCTAssertNoDifference(first.wrappedValue, User(id: 1, name: "Blob"))
+    XCTAssertNoDifference(second.wrappedValue, User(id: 2, name: "Blob Jr"))
+    XCTAssertNoDifference(
+      sharedCollection.wrappedValue,
+      [
+        User(id: 1, name: "Blob"),
+        User(id: 2, name: "Blob Jr"),
+      ]
+    )
+
+    sharedCollection.wrappedValue.swapAt(0, 1)
+    XCTAssertNoDifference(first.wrappedValue, User(id: 1, name: "Blob"))
+    XCTAssertNoDifference(second.wrappedValue, User(id: 2, name: "Blob Jr"))
+    XCTAssertNoDifference(
+      sharedCollection.wrappedValue,
+      [
+        User(id: 2, name: "Blob Jr"),
+        User(id: 1, name: "Blob"),
+      ]
+    )
+
+    first.wrappedValue.name += ", M.D."
+    second.wrappedValue.name += ", Esq."
+    XCTAssertNoDifference(first.wrappedValue, User(id: 1, name: "Blob, M.D."))
+    XCTAssertNoDifference(second.wrappedValue, User(id: 2, name: "Blob Jr, Esq."))
+    XCTAssertNoDifference(
+      sharedCollection.wrappedValue,
+      [
+        User(id: 2, name: "Blob Jr, Esq."),
+        User(id: 1, name: "Blob, M.D."),
+      ]
+    )
+  }
 }
 
 @Reducer
@@ -982,7 +1042,7 @@ private struct SharedFeature {
       case .longLivingEffect:
         return .run { [sharedCount = state.$sharedCount] _ in
           try await self.mainQueue.sleep(for: .seconds(1))
-          sharedCount.withLock { $0 += 1 }
+          await sharedCount.withLock { $0 += 1 }
         }
       case .noop:
         return .none
@@ -1021,7 +1081,7 @@ private struct SimpleFeature {
       switch action {
       case .incrementInEffect:
         return .run { [count = state.$count] _ in
-          count.withLock { $0 += 1 }
+          await count.withLock { $0 += 1 }
         }
       case .incrementInReducer:
         state.count += 1
