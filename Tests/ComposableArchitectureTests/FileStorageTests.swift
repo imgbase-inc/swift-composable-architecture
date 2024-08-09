@@ -16,6 +16,21 @@ final class FileStorageTests: XCTestCase {
     }
   }
 
+  func testBasics_CustomDecodeEncodeClosures() {
+    let fileSystem = LockIsolated<[URL: Data]>([:])
+    withDependencies {
+      $0.defaultFileStorage = .inMemory(fileSystem: fileSystem, scheduler: .immediate)
+    } operation: {
+      @Shared(.utf8String) var string = ""
+      XCTAssertNoDifference(fileSystem.value, [.utf8StringURL: Data()])
+      string = "hello"
+      XCTAssertNoDifference(
+        fileSystem.value[.utf8StringURL].map { String(decoding: $0, as: UTF8.self) },
+        "hello"
+      )
+    }
+  }
+
   func testThrottle() throws {
     let fileSystem = LockIsolated<[URL: Data]>([:])
     let testScheduler = DispatchQueue.test
@@ -434,6 +449,45 @@ final class FileStorageTests: XCTestCase {
       XCTAssertEqual(count, max * (max + 1) / 2)
     }
   }
+
+  @MainActor
+  func testUpdateFileSystemFromBackgroundThread() async throws {
+    await withDependencies {
+      $0.defaultFileStorage = .fileSystem
+    } operation: {
+      try? FileManager.default.removeItem(at: .fileURL)
+
+      @Shared(.fileStorage(.fileURL)) var count = 0
+
+      let publisherExpectation = expectation(description: "publisher")
+      let cancellable = $count.publisher.sink { _ in
+        XCTAssertTrue(Thread.isMainThread)
+        publisherExpectation.fulfill()
+      }
+      defer { _ = cancellable }
+
+      await withUnsafeContinuation { continuation in
+        DispatchQueue.global().async {
+          XCTAssertFalse(Thread.isMainThread)
+          try! Data("1".utf8).write(to: .fileURL)
+          continuation.resume()
+        }
+      }
+
+      await fulfillment(of: [publisherExpectation], timeout: 0.1)
+    }
+  }
+}
+
+extension PersistenceReaderKey
+where Self == FileStorageKey<String> {
+  fileprivate static var utf8String: Self {
+    .fileStorage(
+      .utf8StringURL,
+      decode: { data in String(decoding: data, as: UTF8.self) },
+      encode: { string in Data(string.utf8) }
+    )
+  }
 }
 
 extension URL {
@@ -443,6 +497,8 @@ extension URL {
     .appendingPathComponent("user.json")
   fileprivate static let anotherFileURL = Self(fileURLWithPath: NSTemporaryDirectory())
     .appendingPathComponent("another-file.json")
+  fileprivate static let utf8StringURL = Self(fileURLWithPath: NSTemporaryDirectory())
+    .appendingPathComponent("utf8-string.json")
 }
 
 private struct User: Codable, Equatable, Identifiable {
